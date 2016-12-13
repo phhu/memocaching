@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang='en' >   <!-- manifest="manifest.appcache" -->
+	<head>
+
+		<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+		<title>Memocaching prototype</title>
+		<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js'></script>
+		<script src='geo.js'></script>  <!-- see https://github.com/gwilson/getAccurateCurrentPosition -->
+		<script src='data.js'></script>  <!-- see https://github.com/gwilson/getAccurateCurrentPosition -->
+		<script>
+			
+			var output;
+			$(function() {
+				output= $('#output');
+				//testLocation();
+			});
+			
+			function testLocation(){
+				$('#output').html("testing");
+				getLocation();
+			}
+			
+			function getLocation() {
+				if (navigator.geolocation) {
+					output.html("");	
+					navigator.geolocation.getAccurateCurrentPosition(showPosition,failedToGetPostion, onProgress, {desiredAccuracy:100, maxWait:5* 1000});
+					/*navigator.geolocation.getCurrentPosition(showPosition,failedToGetPostion,{
+						'enableHighAccuracy':true
+						,'maximumAge': 0
+						,'timeout': 60* 1000
+					});*/
+				} else {
+					output.html("Geolocation is not supported by this browser.");
+				}
+				
+				
+			}
+			//on progress gives a location object
+			function onProgress(position){  
+				//$('#output').append( "acc:"+ position.coords.accuracy + ' ' );
+				console.log(position);
+			}
+			function failedToGetPostion(e){
+				console.log("failed to get position");
+				//$('#output').append( "failed to get position");
+			}
+			function showPosition(position) {
+				console.log(position);
+				$('#output').append( "(Latitude: " + position.coords.latitude.toFixed(3) + 
+				" Longitude: " + position.coords.longitude.toFixed(3) +
+				" Accuracy: " + position.coords.accuracy.toFixed(0) +
+				//"<br>Altitude: " + position.coords.altitude +
+				//"<br>Altitude accuracy: " + position.coords.altitudeAccuracy +
+				//"<br>Timestamp: " + new Date(position.timestamp).toString()  + ' (' + position.timestamp  +')'
+				')'); 
+				checkLocsByPosition(position, 500);
+				//getThreeWords(position);
+			}
+			
+			//https://api.what3words.com/w3w?key=60OFFU6I&string=pirate.forms.belly
+			function getThreeWords(position){
+				$.ajax({
+					url: 'https://api.what3words.com/position?key=60OFFU6I&position=' + 
+					encodeURIComponent(position.coords.latitude) + ',' + 
+					encodeURIComponent(position.coords.longitude)
+				})
+				.done(function(data){
+					console.log("done");
+					console.log(data);
+					var w3w =  data.words.join(".");
+					var url = 'https://map.what3words.com/'+w3w;
+					output.append('<p><a href="' + url + '">' + w3w + '</a></p>');
+					$('#map').attr('src', url);
+					 checkLocs(w3w, position);
+				});
+			}
+			function checkLocs(w3w, position){
+				var found= false;
+				$.each(locData,function(index,loc){
+					if ($.inArray(w3w,loc.locations) > -1 ){
+						$('#media').attr('src', loc.media[0].url);
+						output.append('media found');
+						$('#image').style('display', 'none');
+						output.append(' District is '+ loc.tags.district);
+						found = true;
+						return false;
+					} else {
+						//$('#media').attr('src', null);
+						//output.append('no media found');
+					}
+				});
+				if (found==false){
+					$('#district').html('No media have been found for this location');
+					$('#media').attr('src', null);$('#media').hide();
+					$('#notes').html('');
+					$('#image').show();
+				}
+			}
+			
+			function checkLocsByPosition(position, tolerance){
+				var found= false; var leastDistance=100000000000; var locIndex = -1;foundCount = 0;
+				$.each(locData,function(index,loc){
+					var distance = (getDistanceFromLatLonInKm(
+							position.coords.latitude,
+							position.coords.longitude,
+							loc.lat,
+							loc.long
+						) *1000 );
+						
+					if (distance < (loc.tolerance || tolerance) ){
+						found = true; foundCount++;
+						if (distance < leastDistance){
+							leastDistance = distance;
+							locIndex = index;
+						}
+					}
+				});
+						
+				if (found){
+					var loc = locData[locIndex];
+					$('#media').attr('src', loc.media[0].url);
+					//output.append('media found');
+					$('#district').html('You are in the district of ' + loc.tags.district);
+					$('#media').show();
+					$('#image').hide();
+					$('#notes').html( (loc.text != undefined) ?	loc.text : '');
+				} else {
+					$('#district').html('No media have been found for this location.');
+					$('#media').hide();
+					$('#image').show();
+					$('#media').attr('src', null);
+					$('#notes').html('');
+				}
+			}
+
+			
+		function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
+		  var R = 6371; // Radius of the earth in km
+		  var dLat = deg2rad(lat2-lat1);  // deg2rad below
+		  var dLon = deg2rad(lon2-lon1); 
+		  var a = 
+			Math.sin(dLat/2) * Math.sin(dLat/2) +
+			Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+			Math.sin(dLon/2) * Math.sin(dLon/2)
+			; 
+		  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+		  var d = R * c; // Distance in km
+		  return d;
+		}
+
+		function deg2rad(deg) {
+		  return deg * (Math.PI/180)
+		}			
+		</script>
+		<style>
+			@font-face {
+				font-family: LemonYellowSun;
+				src: url("LemonYellowSun.otf") format("opentype");
+				}
+			a { color: #008; text-decoration: underline; cursor: pointer; }
+			body {background-color:rgb(255,222,22);
+				border: 10px;
+				font-family:LemonYellowSun,Avenir;
+				margin: 20px 0 0 0;
+			}
+			iframe#media {
+				max-width:800px;
+				margin: 0 auto;
+			}
+			p#title{
+				text-align:center;
+			}
+			div#content {
+				margin: 0 auto;
+				max-width:800px;
+				text-align:center;
+			}
+			#output {
+				margin: 30px 0px 15px 0px;
+				font-size: 9pt;
+				font-family:avenir;
+			}
+			#district, #title, #testbutton{
+				font-size:18pt;
+				margin: 10px;
+			}
+			#notes {
+				font-size:15pt;
+				font-family:avenir;
+			}
+			.center {
+				text-align:center;
+				margins: 0 auto;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="content">
+			
+			<p id="title">Memocaching: discover memories of Glasgow!</p>
+			<input id="testbutton" class="center" type="button" value="Test my location" onclick="testLocation();" />
+			
+			<div id="district" style=""></div>
+			<br/>
+			<img class="center" id="image" src="memocaching.jpg" />
+			<iframe id="media"  height="600px" frameBorder="0" width="100%" ></iframe>
+			<div id="notes"></div>
+			<div id="output"></div>
+			<iframe src="memocaching.jpg" style="display:none;border:0 " frameBorder="0" id="map" height="600" width="100%" ></iframe>
+		</div>
+		
+	</body>
+</html>
